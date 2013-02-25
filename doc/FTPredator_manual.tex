@@ -1,0 +1,44 @@
+\documentclass{book}
+%
+%--------------------   start of the 'preamble'
+%
+\usepackage[a4paper, top=3cm, bottom=3cm]{geometry}
+\usepackage[latin1]{inputenc}
+\usepackage{setspace}
+\usepackage{tocloft}
+\usepackage{fancyhdr}
+\usepackage{graphicx,amssymb,amstext,amsmath,verbatim,dirtree,listings,url}
+
+%\parskip = 1cm
+%\pagestyle{fancy}
+
+%
+%---------------------   end of the 'preamble'
+%
+\begin{document}
+%-----------------------------------------------------------
+
+\pagestyle{empty}
+%\pagenumbering{}
+% Set book title
+\title{\textbf{FTPredator} \\ A Forensic Tool for Scraping Vulnerable FTP Servers \\{\large User Manual}}
+% Include Author name and Copyright holder name
+\author{Christopher A. Wood \\ {\tt caw4567@rit.edu}}
+\maketitle
+
+\pagestyle{fancy}
+%\fancyhf{}
+%\lhead[]{\thepage}
+%\rhead[\thepage]{}
+
+%-----------------------------------------------------------
+%-----------------------------------------------------------
+\tableofcontents
+%-----------------------------------------------------------
+\include{start}
+%-----------------------------------------------------------
+
+\bibliography{ref}{}
+\bibliographystyle{plain}
+
+\end{document}
