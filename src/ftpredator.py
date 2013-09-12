@@ -23,13 +23,72 @@ import sys
 import ftplib
 import argparse
 
+def check_contents(ftp, strings):
+	''' 
+	Return a list of absolute paths to files on the ftp connection that contain sensitive words.
+	'''
+	current_dir_contents = ftp.nlist()
+	sensitive_files = []
+	for i in current_dir_contents:
+		try:
+			# try to set the new current working directory to each item in the list to determine if its a new dir
+			ftp.cwd(i)
+			sensitive_files.append(check_contents(ftp, strings))
+		except:
+			if name_contains(i, strings):
+				sensitive_files.append(i)
+	return sensitive_files
+
+def name_contains(file_name, strings):
+	'''
+	Return the file name if it contains a sensitive word.
+	'''
+	for i in strings:
+		result = i in file_name
+		if result == True:
+			return True
+	return False
+
 def check_host(host, usernames, passwords, strings):
 	''' Check the host by logging in with the set of usernames
 	and passwords. 
 
 	Return a list of absolute paths to files on the host that contain sensitive words
 	'''
-	return []
+
+	try: 
+		# connect to the target host over clear text FTP
+		ftp = FTP(host)
+		try:
+			# attempt to login with anonymous
+			ftp.login()
+		except:
+			# attempt to login with all usernames provided with blank passwords
+			for user in usernames:
+				try:
+					ftp.login(host, user, "")
+					check_contents(ftp, strings)
+				except:
+					print user + " username failed to authenticate with blank password"
+	except:
+		# connect to the target host over encrypted FTP
+		ftp = FTP_TLS(host)
+		try:
+			# attempt to login with anonymous
+			ftp.login()
+			check_contents(ftp, strings)
+		except:
+			# attempt to login with all usernames provided with blank passwords
+			for user in usernames:
+				try:
+					ftp.login(host, user, "")
+					check_contents(ftp, strings)
+				except:
+					print user + " username failed to authenticate with blank password"
+	else:
+		# host is not accessible over clear text or encrypted FTP ports
+		print host + " does not appear to have an open FTP service"
+		return []
 
 def main(host = "", host_file = "", username_file = "USERNAMES", password_file = "PASSWORDS", string_file = "STRINGS"):
 	''' Main entry point - use the specified parameters to target single/multiple hosts.
@@ -62,7 +121,7 @@ def usage():
 if __name__ == "__main__":
 	# setup the parser
 	parser = argparse.ArgumentParser(prog='ftpredator')
-	parser.add_argument('--host', type=str, default="192.158.1.1")
+	parser.add_argument('--host', type=str, default="192.168.1.1")
 	parser.add_argument('--host_file', type=str, default="")
 	parser.add_argument('--username_file', type=str, default="USERNAMES")
 	parser.add_argument('--password_file', type=str, default="PASSWORDS")
@@ -73,7 +132,7 @@ if __name__ == "__main__":
 
 	# actually do the parsing and then strip out the parameters
 	args = parser.parse_args()
-	host = parser.host
+	host = parser.hosts
 	host_file = parser.host_file
 	username_file = parser.username_file
 	password_file = parser.password_file
