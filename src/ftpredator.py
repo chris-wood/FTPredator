@@ -42,6 +42,7 @@ def check_remote_ftp_contents(ftp, strings, dirstr = "/"):
 		try:
 			# try to set the new current working directory to each item in the list to determine if its a new dir
 			ftp.cwd(entry)
+
 			sensitive_files.append(check_remote_ftp_contents(ftp, strings, dirstr + str(entry) + "/"))
 		except:
 			# This entry must be a file, so create a list of matching words
@@ -207,6 +208,25 @@ def find_matching_files_on_host(host, usernames, passwords, strings):
 			ftp.quit()
 
 	return paths
+
+	# check for duplicate items in nested list
+	def unique_nested_list(list):
+		'''Remove duplicate file entries from nested list'''
+		counter = 0
+		file_names = []
+		list_name = []
+		for i in list:
+			if type(i) == list:
+				counter = counter + 1
+				list_name = i
+				unique_nested_list(i)
+			else:
+				# check for unique
+				if i in file_names:
+					# remove the duplicate item
+					list_name.remove(i)
+				else:
+					file_names.append(i)
 
 	# try: 
 	# 	# connect to the target host over clear text FTP
